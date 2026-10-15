@@ -13,6 +13,13 @@ import LogoPerusahaan from './assets/logo-perusahaan.jpg';
 // ==========================================
 const API_URL = "https://script.google.com/macros/s/AKfycbyVAyByEQNq7RS2e1Lfs5duvx8MW4jXue-iG3L8R3uY4IBDEpiNHi39sGP5-oy2eqSKQA/exec";
 
+// HELPER: Konversi nilai ke Boolean yang aman
+const parseBoolean = (val) => {
+  if (val === true || val === 1) return true;
+  if (typeof val === 'string' && (val.toUpperCase() === 'TRUE' || val === '1')) return true;
+  return false;
+};
+
 const formatRupiah = (number) => {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency', currency: 'IDR', minimumFractionDigits: 0
@@ -83,8 +90,7 @@ export default function HRDashboard() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Paksa ubah string "TRUE" / "FALSE" dari sheets ke boolean asli
-        return parsed.map(d => ({...d, saturdayHalfDay: d.saturdayHalfDay === true || String(d.saturdayHalfDay).toUpperCase() === 'TRUE'}));
+        return parsed.map(d => ({...d, saturdayHalfDay: parseBoolean(d.saturdayHalfDay)}));
       } catch(e) { return []; }
     }
     return [];
@@ -106,8 +112,7 @@ export default function HRDashboard() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Paksa ubah string "TRUE" / "FALSE" dari sheets ke boolean asli agar tidak error "Hari Libur"
-        return parsed.map(a => ({...a, isLibur: a.isLibur === true || String(a.isLibur).toUpperCase() === 'TRUE'}));
+        return parsed.map(a => ({...a, isLibur: parseBoolean(a.isLibur)}));
       } catch(e) { return []; }
     }
     return [];
@@ -123,13 +128,9 @@ export default function HRDashboard() {
             const data = await res.json();
             if (Array.isArray(data)) {
               let sanitizedData = data;
-              // Filter keamanan tambahan agar string boolean terkonversi dengan benar
-              if (sheet === 'attendances') {
-                sanitizedData = data.map(a => ({...a, isLibur: a.isLibur === true || String(a.isLibur).toUpperCase() === 'TRUE'}));
-              }
-              if (sheet === 'departments') {
-                sanitizedData = data.map(d => ({...d, saturdayHalfDay: d.saturdayHalfDay === true || String(d.saturdayHalfDay).toUpperCase() === 'TRUE'}));
-              }
+              if (sheet === 'attendances') sanitizedData = data.map(a => ({...a, isLibur: parseBoolean(a.isLibur)}));
+              if (sheet === 'departments') sanitizedData = data.map(d => ({...d, saturdayHalfDay: parseBoolean(d.saturdayHalfDay)}));
+              
               setter(sanitizedData);
               localStorage.setItem(storageKey, JSON.stringify(sanitizedData));
             }
@@ -334,7 +335,7 @@ export default function HRDashboard() {
       const empId = parts[0]; const dateRaw = parts[1];
       const scanIn = parts[2]; const scanOut = parts[3] || ''; 
       
-      // PARSER TANGGAL YANG LEBIH ROBUST (Tahan banting format YYYY-MM-DD maupun DD/MM/YYYY)
+      // PARSER TANGGAL
       let y, m, d;
       if (dateRaw.includes('/')) {
          const p = dateRaw.split('/');
@@ -356,7 +357,7 @@ export default function HRDashboard() {
       if (!employee) { logs.push({ type: 'error', row: i+1, msg: `Pegawai ID '${empId}' tidak ditemukan.` }); continue; }
       
       if (globalBranchFilter && employee.branch !== globalBranchFilter) {
-        logs.push({ type: 'error', row: i+1, msg: `Pegawai ID '${empId}' tidak terdaftar di cabang yang dipilih.` }); continue; 
+        logs.push({ type: 'error', row: i+1, msg: `Pegawai ID '${empId}' tidak terdaftar di cabang terpilih.` }); continue; 
       }
 
       const schedule = schedules.find(s => s.empId === empId && date >= s.startDate && date <= s.endDate);
@@ -365,8 +366,8 @@ export default function HRDashboard() {
       const shiftMaster = masterShifts.find(ms => ms.id === schedule.shiftId);
       const dept = departments.find(dp => dp.id === employee.department);
       
-      // LOGIKA PENENTUAN SABTU SETENGAH HARI BERDASARKAN DIVISI
-      const isHalfDaySat = dept && (dept.saturdayHalfDay === true || String(dept.saturdayHalfDay).toUpperCase() === 'TRUE');
+      // LOGIKA SABTU SETENGAH HARI (DENGAN PARSER AMAN)
+      const isHalfDaySat = dept && parseBoolean(dept.saturdayHalfDay);
 
       let targetTimeIn = shiftMaster.timeIn; let targetTimeOut = shiftMaster.timeOut; 
       let shiftNameDisplay = shiftMaster.name; let isLibur = false;
@@ -393,7 +394,6 @@ export default function HRDashboard() {
         }
       }
 
-      // Pastikan isLibur disimpan murni sebagai boolean standar Javascript
       newAttendances.push({ id: Date.now().toString() + i, empId, date, scanIn, scanOut, shiftName: shiftNameDisplay, lateMinutes, earlyMinutes, rawOvertimeMinutes, isLibur: isLibur });
       logs.push({ type: 'success', row: i+1, msg: `Sukses import absen '${employee.name}' tgl ${dateRaw} (${shiftNameDisplay}).` });
     }
@@ -474,8 +474,7 @@ export default function HRDashboard() {
       const isCountOvertime = emp.countOvertime === 'Ya';
 
       empAtt.forEach(att => {
-        // Hanya baca jika secara absolut boolean true
-        const isTrueHoliday = att.isLibur === true;
+        const isTrueHoliday = parseBoolean(att.isLibur);
 
         if (!isTrueHoliday) {
           totalLateMinutes += (att.lateMinutes || 0); totalEarlyMinutes += (att.earlyMinutes || 0);
@@ -1024,7 +1023,7 @@ export default function HRDashboard() {
                       <table className="w-full text-sm text-left"><thead className="bg-[#f8fafc] border-b text-slate-500 text-[11px] uppercase font-bold"><tr><th className="px-6 py-3">ID Dept</th><th className="px-6 py-3">Nama Departemen</th><th className="px-6 py-3 text-center">Aturan Sabtu</th><th className="px-6 py-3 text-right">Aksi</th></tr></thead>
                       <tbody className="divide-y divide-gray-100">{departments.map(d => <tr key={d.id} className="hover:bg-slate-50"><td className="px-6 py-3 font-mono text-xs font-bold text-[#047857]">{d.id}</td><td className="px-6 py-3 font-bold text-gray-800">{d.name}</td>
                       <td className="px-6 py-3 text-center">
-                        {(d.saturdayHalfDay === true || String(d.saturdayHalfDay).toUpperCase() === 'TRUE') ? <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-[10px] font-bold">Pulang 15:00</span> : <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-[10px] font-bold">Normal</span>}
+                        {parseBoolean(d.saturdayHalfDay) ? <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-[10px] font-bold">Pulang 15:00</span> : <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-[10px] font-bold">Normal</span>}
                       </td>
                       <td className="px-6 py-3 text-right"><button onClick={()=>deleteItem(updateDepartments, departments, d.id)} className="text-rose-400 hover:text-rose-600"><Trash2 size={16}/></button></td></tr>)}</tbody></table>
                     </div>
@@ -1261,7 +1260,7 @@ export default function HRDashboard() {
                             <td className="px-6 py-4 text-center font-mono font-bold text-[#047857]">{att.scanIn}</td>
                             <td className="px-6 py-4 text-center font-mono font-bold text-gray-600">{att.scanOut || '-'}</td>
                             <td className="px-6 py-4 text-center">
-                              {att.isLibur ? (
+                              {parseBoolean(att.isLibur) ? (
                                 <span className="text-purple-600 font-bold bg-purple-50 border border-purple-200 px-3 py-0.5 rounded-full text-[10px]">Hari Libur</span>
                               ) : (
                                 <div className="flex flex-col items-center gap-1.5">
