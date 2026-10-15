@@ -129,6 +129,7 @@ export default function HRDashboard() {
             if (Array.isArray(data)) {
               let sanitizedData = data;
               if (sheet === 'attendances') sanitizedData = data.map(a => ({...a, isLibur: parseBoolean(a.isLibur)}));
+              // PERBAIKAN B: Memastikan nilai boolean tersanitasi dengan benar
               if (sheet === 'departments') sanitizedData = data.map(d => ({...d, saturdayHalfDay: parseBoolean(d.saturdayHalfDay)}));
               
               setter(sanitizedData);
@@ -366,7 +367,7 @@ export default function HRDashboard() {
       const shiftMaster = masterShifts.find(ms => ms.id === schedule.shiftId);
       const dept = departments.find(dp => dp.id === employee.department);
       
-      // LOGIKA SABTU SETENGAH HARI (DENGAN PARSER AMAN)
+      // PERBAIKAN A: Memastikan logika penentuan Sabtu Setengah Hari membaca boolean dengan benar
       const isHalfDaySat = dept && parseBoolean(dept.saturdayHalfDay);
 
       let targetTimeIn = shiftMaster.timeIn; let targetTimeOut = shiftMaster.timeOut; 
