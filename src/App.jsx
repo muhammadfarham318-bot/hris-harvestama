@@ -373,7 +373,7 @@ const handleSaveEmployee = async (e) => {
     for (let i = startIndex; i < lines.length; i++) {
       let line = lines[i].trim(); if (!line) continue;
       line = line.replace(/["“”']/g, ''); 
-      const parts = line.split(/[\s\t,;]+/);
+      const parts = line.split(/[\s	,;]+/);
       if (parts.length < 3) continue;
 
       const empId = parts[0]; const dateRaw = parts[1];
