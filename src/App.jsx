@@ -460,7 +460,7 @@ export default function HRDashboard() {
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [attendances, employees, attStartDate, attEndDate, attFilterDept, attSearchTerm, globalBranchFilter]);
 
-  const payrollData = useMemo(() => {
+const payrollData = useMemo(() => {
     const filteredAttendance = attendances.filter(a => a.date >= payrollPeriod.startDate && a.date <= payrollPeriod.endDate);
     
     return baseFilteredEmployees.map(emp => {
@@ -486,7 +486,17 @@ export default function HRDashboard() {
         }
       });
       
-      let calculatedBaseSalary = emp.salaryType === 'Harian' ? emp.baseSalary * totalDays : emp.baseSalary;
+      // LOGIKA BARU: Perhitungan Gaji Berdasarkan Kehadiran (Prorata untuk Bulanan)
+      let calculatedBaseSalary = 0;
+      if (emp.salaryType === 'Harian') {
+        calculatedBaseSalary = emp.baseSalary * totalDays;
+      } else if (emp.salaryType === 'Mingguan' || emp.salaryType === 'Bulanan') {
+         // Asumsi 1 bulan = 26 hari kerja rata-rata. Gaji bulanan dibagi 26, lalu dikali jumlah hari hadir.
+         // Jika totalDays 0, otomatis calculatedBaseSalary = 0.
+         const dailyRateForMonthly = emp.baseSalary / 26; 
+         calculatedBaseSalary = dailyRateForMonthly * totalDays;
+      }
+
       const totalBonus = emp.dailyBonus * totalDays;
 
       const latePenalty = totalPenalizedLateMinutes * (Number(emp.latePenaltyRate) || 0);
@@ -511,6 +521,9 @@ export default function HRDashboard() {
 
   const displayPayrollData = useMemo(() => {
     return payrollData.filter(data => {
+      // LOGIKA BARU: Sembunyikan karyawan yang kehadirannya 0
+      if (data.totalDays === 0) return false;
+
       const safeName = String(data.name || '').toLowerCase();
       const safeId = String(data.id || '').toLowerCase();
       const searchLower = payrollSearchTerm.toLowerCase();
