@@ -244,8 +244,10 @@ export default function HRDashboard() {
     window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
 
-  const handleSaveEmployee = (e) => {
+const handleSaveEmployee = async (e) => {
     e.preventDefault();
+    setIsSyncing(true); // Tampilkan indikator loading/syncing
+    
     const parsedBaseSalary = parseFloat(empForm.baseSalary) || 0;
     const parsedDailyBonus = parseFloat(empForm.dailyBonus) || 0;
     const parsedOvertimeRate = parseFloat(empForm.overtimeRate) || 0;
@@ -258,19 +260,60 @@ export default function HRDashboard() {
       overtimeRate: parsedOvertimeRate, latePenaltyRate: parsedLatePenaltyRate, earlyPenaltyRate: parsedEarlyPenaltyRate
     };
 
+    let updatedEmployees;
     if (isEditing) {
-      updateEmployees(employees.map(emp => emp.id === empForm.id ? finalEmpData : emp));
+      updatedEmployees = employees.map(emp => emp.id === empForm.id ? finalEmpData : emp);
     } else {
       if (employees.some(emp => emp.id === empForm.id)) {
         alert('ID Karyawan sudah digunakan! Silakan gunakan ID lain.');
+        setIsSyncing(false);
         return;
       }
-      updateEmployees([...employees, finalEmpData]);
+      updatedEmployees = [...employees, finalEmpData];
     }
     
+    // UPDATE SEMENTARA DI LOKAL AGAR UI LANGSUNG BERUBAH
+    setEmployees(updatedEmployees);
     setShowEmpForm(false);
     setIsEditing(false);
     setEmpForm(initialEmpForm);
+
+    try {
+      // KIRIM KE GOOGLE APPS SCRIPT
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ sheetName: 'employees', data: updatedEmployees })
+      });
+      
+      const responseData = await response.json();
+      
+      if (responseData.status === "success") {
+        // PERBAIKAN KRUSIAL: 
+        // Jika ada Base64 (foto baru), kita WAJIB me-refresh ulang data dari API, 
+        // karena Google Apps Script telah mengubah Base64 menjadi Link URL Google Drive.
+        // Jika tidak di-fetch ulang, localStorage akan menyimpan Base64 yang bikin error.
+        
+        const hasBase64Image = finalEmpData.photo?.startsWith('data:image') || finalEmpData.ktpPhoto?.startsWith('data:image');
+        
+        if (hasBase64Image) {
+           const res = await fetch(`${API_URL}?action=get&sheet=employees`);
+           const freshData = await res.json();
+           if (Array.isArray(freshData)) {
+              setEmployees(freshData);
+              localStorage.setItem('hr_employees', JSON.stringify(freshData));
+           }
+        } else {
+           // Jika tidak ada foto baru, cukup simpan data lokal ke localStorage
+           localStorage.setItem('hr_employees', JSON.stringify(updatedEmployees));
+        }
+      } else {
+        alert("Gagal menyimpan ke Cloud: " + responseData.message);
+      }
+    } catch (error) {
+      alert("Terjadi kesalahan jaringan saat menyimpan data.");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleAddSchedule = (e) => {
